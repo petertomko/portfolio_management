@@ -1,0 +1,50 @@
+# initial settings
+.First <- function(){
+  
+  # java params
+  options(java.parameters = "-Xmx12G")
+  
+  # shiny params
+  options(shiny.maxRequestSize = 30 * 1024 ^ 2)
+  
+  # reading
+  library("readr")
+  
+  # tidy
+  library("tidyverse")
+  library("tidymodels")
+  library("pins")
+  
+  # viz
+  library("ggplot2")
+  
+  # string manipulation
+  library("stringr")
+  
+  # db
+  library("DBI")
+  
+  # data manipulation
+  library("dplyr")
+  library("data.table")
+  
+  # dates
+  library("lubridate")
+  
+  # output
+  library("xlsx")
+  
+  # web
+  library(httr)
+  
+  # set ggplot2 theme
+  theme_set(theme_minimal())
+}
+# one line functions
+mean_x <- function(x) mean(x, na.rm = T, fill = 0)
+sum_x <- function(x) sum(x, na.rm = T, fill = 0)
+
+# loading functions
+source("./R/lib/db_manager.R")
+source("./R/lib/get_sql.R")
+source("./R/lib/get_query.R")
