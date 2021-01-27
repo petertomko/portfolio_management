@@ -16,7 +16,7 @@ l.out <- BatchGetSymbols(tickers = tickers,
                          first.date = first.date,
                          last.date = last.date, 
                          freq.data = freq.data,
-                         cache.folder = file.path(tempdir(), "BGS_Cache"))
+                         cache.folder = file.path(tempdir(), "_cache"))
 
 kept_tickers <- 
   l.out$df.control %>% 
