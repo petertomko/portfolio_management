@@ -7,8 +7,13 @@
   # shiny params
   options(shiny.maxRequestSize = 30 * 1024 ^ 2)
   
+  # data download
+  library("tidyquant")
+  library("BatchGetSymbols")
+  
   # reading
   library("readr")
+  library("readxl")
   
   # tidy
   library("tidyverse")
@@ -35,16 +40,11 @@
   library("xlsx")
   
   # web
-  library(httr)
+  library("httr")
+  
+  # ML models
+  library("prophet")
   
   # set ggplot2 theme
   theme_set(theme_minimal())
 }
-# one line functions
-mean_x <- function(x) mean(x, na.rm = T, fill = 0)
-sum_x <- function(x) sum(x, na.rm = T, fill = 0)
-
-# loading functions
-source("./R/lib/db_manager.R")
-source("./R/lib/get_sql.R")
-source("./R/lib/get_query.R")
