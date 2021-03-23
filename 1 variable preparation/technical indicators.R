@@ -25,8 +25,7 @@ modelling_data <-
   dplyr::mutate(
     
     # - 10 day ahead target
-    price_max_10w = zoo::rollmax(x = dplyr::lag(close, n = 1), k = 10, 
-                                 align = "right", fill = NA, na.rm = T),
+    price_max_10w = TTR::runMax(x = dplyr::lag(close, n = 1), n = 10),
     target_10w =dplyr::if_else(price_max_10w/close > 1.075, 1, 0)
     
   ) %>% 
@@ -117,4 +116,11 @@ modelling_data <-
     m_vol_30 = runMean(volume/lag(volume, n = 30), n = 30),
     m_vol_60 = runMean(volume/lag(volume, n = 30), n = 60)
   ) %>% 
-  as.data.frame()
+  
+  na.omit() %>% 
+  as.data.frame() %>% 
+  
+  pins::pin(x = ., 
+            name = "modelling_data", 
+            description = "Modelling Data for Trading Strategy", 
+            board = "Portfolio Management")
