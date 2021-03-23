@@ -19,6 +19,20 @@ modelling_data <-
   dplyr::select(-n_obs) %>% 
   as.data.frame() %>% 
   
+  # - Create target variable
+  dplyr::group_by(ticker) %>% 
+  dplyr::arrange(desc(dt)) %>% 
+  dplyr::mutate(
+    
+    # - 10 day ahead target
+    price_max_10w = zoo::rollmax(x = dplyr::lag(close, n = 1), k = 10, 
+                                 align = "right", fill = NA, na.rm = T),
+    target_10w =dplyr::if_else(price_max_10w/close > 1.075, 1, 0)
+    
+  ) %>% 
+  dplyr::select(-price_max_10w) %>% 
+  as.data.frame() %>% 
+  
   # - Technical Indicators
   dplyr::group_by(ticker) %>% 
   dplyr::arrange(dt) %>% 
@@ -103,79 +117,4 @@ modelling_data <-
     m_vol_30 = runMean(volume/lag(volume, n = 30), n = 30),
     m_vol_60 = runMean(volume/lag(volume, n = 30), n = 60)
   ) %>% 
-  as.data.frame()
-
-# ----- Create Target Variable -----
-target_var <- 
-  
-  modelling_data %>% 
-  dplyr::select(dt, ticker, close) %>% 
-  as.data.frame() %>% 
-  
-  dplyr::left_join(., modelling_data %>% 
-                     dplyr::select(dt, ticker, close) %>% 
-                     dplyr::rename(lead_dt = dt,
-                                   lead_close = close) %>% 
-                     as.data.frame()) %>% 
-  as.data.frame()
-
-dplyr::group_by(ticker, dt) %>% 
-  dplyr::mutate(
-    target_var = purrr::map2(ticker, dt, function(sym, t_dt){
-      
-      # test
-      # sym <- "AAL"
-      # t_dt <- as.Date("2016-04-20")
-      
-      # get initial price
-      init_price <- 
-        modelling_data %>% 
-        dplyr::filter(ticker %in% sym & dt %in% t_dt) %>% 
-        pull(close)
-      
-      # subset data
-      tmp_df <- 
-        modelling_data %>% 
-        dplyr::filter(ticker %in% sym & dt > t_dt) %>% 
-        dplyr::select(dt, ticker, close, volume) %>% 
-        as.data.frame() %>% 
-        
-        tidyr::crossing(., data.frame(target_w = c(10, 20, 40, 60))) %>% 
-        as.data.frame() %>% 
-        
-        group_by(target_w) %>% 
-        nest() %>% 
-        
-        dplyr::group_by(target_w) %>% 
-        dplyr::mutate(
-          price_ch = purrr::map2(target_w, data, function(w, df){
-            
-            # - pull prices
-            pulled_prices <- 
-              df %>% 
-              dplyr::arrange(dt) %>% 
-              slice(1:w) %>% 
-              pull(close)
-            
-            # - create condition
-            p_cond <- (pulled_prices/init_price)
-            
-            # - check condition
-            p_cond_check <-
-              data.frame(
-                target_ch_1 = dplyr::if_else(sum(p_cond >= 1.01) > 0, 1, 0),
-                target_ch_25 = dplyr::if_else(sum(p_cond >= 1.025) > 0, 1, 0),
-                target_ch_5 = dplyr::if_else(sum(p_cond >= 1.05) > 0, 1, 0),
-                
-                sd_price = sd(pulled_prices)/init_price
-              )
-          })
-        ) %>% 
-        dplyr::select(-data) %>% 
-        tidyr::unnest(c(price_ch))
-      
-      return(tmp_df)
-    })
-  ) %>% 
-  tidyr::unnest(c(target_var)) %>% 
   as.data.frame()
