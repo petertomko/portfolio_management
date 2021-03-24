@@ -1,3 +1,6 @@
+# ----- Connect to Board -----
+pins::board_register_local(name = "Portfolio Management")
+
 # ----- Load Data and Compute Technical Indicators -----
 modelling_data <- 
   
@@ -44,14 +47,14 @@ modelling_data <-
     rsi_60 = TTR::RSI(close, n = 60),
     
     # MACD
-    macd_5_10 = TTR::MACD(x = close, nFast = 5, nSlow = 10)/close,
-    macd_5_30 = TTR::MACD(x = close, nFast = 5, nSlow = 30)/close,
-    macd_5_60 = TTR::MACD(x = close, nFast = 5, nSlow = 60)/close,
+    macd_5_10 = TTR::MACD(x = close, nFast = 5, nSlow = 10)[,1]/close,
+    macd_5_30 = TTR::MACD(x = close, nFast = 5, nSlow = 30)[,1]/close,
+    macd_5_60 = TTR::MACD(x = close, nFast = 5, nSlow = 60)[,1]/close,
     
-    macd_10_30 = TTR::MACD(x = close, nFast = 10, nSlow = 30)/close,
-    macd_10_60 = TTR::MACD(x = close, nFast = 10, nSlow = 60)/close,
+    macd_10_30 = TTR::MACD(x = close, nFast = 10, nSlow = 30)[,1]/close,
+    macd_10_60 = TTR::MACD(x = close, nFast = 10, nSlow = 60)[,1]/close,
     
-    macd_30_60 = TTR::MACD(x = close, nFast = 30, nSlow = 60)/close,
+    macd_30_60 = TTR::MACD(x = close, nFast = 30, nSlow = 60)[,1]/close,
     
     # MACD change
     abs_ch_macd_5_10 = lag(macd_5_10, n = 1) - macd_5_10,
