@@ -1,16 +1,19 @@
+source("1 variable preparation/combine datasets.R")
+
 # ------ Load Library -----
 library("lightgbm")
 
+# ----- Set Date for Training -----
 TRAIN_DT <- as.Date("2021-01-01")
 
 # ----- Register Board -----
-pins::board_register_local(name = "Portfolio Management")
+pins::board_register_local(name = board_nm)
 
 # ----- Load Data -----
 modelling_data <- 
   
   # - Download Data
-  pins::pin_get("modelling_data", "Portfolio Management") %>% 
+  pins::pin_get("modelling_data_1.03_return", board_nm) %>% 
   as.data.frame() %>% 
   
   # - split train/test
@@ -47,12 +50,8 @@ dtest <- lgb.Dataset.create.valid(dtrain,
                                     as.matrix(), 
                                   label = test_df$target_10w)
 
-rm(modelling_data)
-rm(train_df)
-rm(test_df)
-gc()
 
-nrounds <- 2L
+nrounds <- 200L
 param <- list(
   num_leaves = 4L
   , learning_rate = 1.0
@@ -60,14 +59,30 @@ param <- list(
 )
 
 print("Running cross validation")
-# Do cross validation, this will print result out as
-# [iteration]  metric_name:mean_value+std_value
-# std_value is standard deviation of the metric
+
 lgb_model <- 
-  lgb.cv(
+  lgb.train(
     param
     , dtrain
+    , valids = list(test = dtest)
     , nrounds
-    , nfold = 5L
-    , eval = "binary_error"
+    , nfold = 20L
+    , eval = "average_precision"
+    , early_stopping_rounds = 5
+    , stratified = TRUE
   )
+
+test_predict <- predict(lgb_model, 
+                        test_df %>% 
+                          dplyr::select(-target_10w) %>% 
+                          as.matrix())
+
+test_df$pred_prob <- test_predict
+
+test_df <- 
+  test_df %>% 
+  dplyr::mutate(pred_lbl = dplyr::if_else(pred_prob > 0.5, "yes", "no")) %>% 
+  as.data.frame()
+
+table(test_df$target_10w, test_df$pred_lbl)
+gc()

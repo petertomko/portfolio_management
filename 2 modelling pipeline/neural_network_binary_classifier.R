@@ -11,14 +11,26 @@ library("reticulate")
 
 TRAIN_DT <- as.Date("2021-01-01")
 
+if(as.character(Sys.info()["nodename"]) == "ND0151MB"){
+  board_nm <- "Portfolio Management"
+}
+
+if(as.character(Sys.info()["nodename"]) == "copernicus64gb"){
+  board_nm <- "Portfolio Management (Copernicus)"
+}
+
+if(!(as.character(Sys.info()["nodename"]) %in% c("copernicus64gb", "ND0151MB"))){
+  board_nm <- "Portfolio Management"
+}
+
 # ----- Register Board -----
-pins::board_register_local(name = "Portfolio Management")
+pins::board_register_local(name = board_nm)
 
 # ----- Load Data -----
 modelling_data <- 
   
   # - Download Data
-  pins::pin_get("modelling_data", "Portfolio Management") %>% 
+  pins::pin_get("modelling_data", board_nm) %>% 
   as.data.frame() %>% 
   
   # create factor TARGET
@@ -94,7 +106,7 @@ binclass_model %>% fit(
 summary(binclass_model)
 
 # Calculating accuracy
-binclass_model %>% predict_proba(object = ., x = X_test)
+test_pred <- predict(binclass_model, x = X_test)
 
 evaluation <- 
   binclass_model %>% evaluate(

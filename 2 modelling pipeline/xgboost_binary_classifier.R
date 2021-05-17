@@ -4,14 +4,26 @@ library("rBayesianOptimization")
 
 TRAIN_DT <- as.Date("2021-01-01")
 
+if(as.character(Sys.info()["nodename"]) == "ND0151MB"){
+  board_nm <- "Portfolio Management"
+}
+
+if(as.character(Sys.info()["nodename"]) == "copernicus64gb"){
+  board_nm <- "Portfolio Management (Copernicus)"
+}
+
+if(!(as.character(Sys.info()["nodename"]) %in% c("copernicus64gb", "ND0151MB"))){
+  board_nm <- "Portfolio Management"
+}
+
 # ----- Register Board -----
-pins::board_register_local(name = "Portfolio Management")
+pins::board_register_local(name = board_nm)
 
 # ----- Load Data -----
 modelling_data <- 
   
   # - Download Data
-  pins::pin_get("modelling_data", "Portfolio Management") %>% 
+  pins::pin_get("modelling_data", board_nm) %>% 
   as.data.frame() %>% 
   
   # - split train/test
