@@ -23,7 +23,7 @@ pins::board_register_local(name = board_nm)
 modelling_data <- 
   
   # - Download Data
-  pins::pin_get("modelling_data", board_nm) %>% 
+  pins::pin_get("modelling_data_1.01_ret_10_wind", board_nm) %>% 
   as.data.frame() %>% 
   
   # - split train/test

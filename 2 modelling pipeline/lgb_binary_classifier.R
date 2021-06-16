@@ -13,7 +13,7 @@ pins::board_register_local(name = board_nm)
 modelling_data <- 
   
   # - Download Data
-  pins::pin_get("modelling_data_1.03_return", board_nm) %>% 
+  pins::pin_get("modelling_data_1.03_ret_10_wind", board_nm) %>% 
   as.data.frame() %>% 
   
   # - split train/test
@@ -50,7 +50,6 @@ dtest <- lgb.Dataset.create.valid(dtrain,
                                     as.matrix(), 
                                   label = test_df$target_10w)
 
-
 nrounds <- 200L
 param <- list(
   num_leaves = 4L
@@ -81,7 +80,7 @@ test_df$pred_prob <- test_predict
 
 test_df <- 
   test_df %>% 
-  dplyr::mutate(pred_lbl = dplyr::if_else(pred_prob > 0.5, "yes", "no")) %>% 
+  dplyr::mutate(pred_lbl = dplyr::if_else(pred_prob > 0.55, "yes", "no")) %>% 
   as.data.frame()
 
 table(test_df$target_10w, test_df$pred_lbl)
