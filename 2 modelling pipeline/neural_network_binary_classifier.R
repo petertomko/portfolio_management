@@ -1,13 +1,10 @@
 # ------ Load Library -----
-library("xgboost")
-library("rBayesianOptimization")
+library("reticulate")
 library("tidyverse")
 library("keras")
-library("fastDummies")
-library("caret")
-library("tensorflow")
 library("kerasR")
-library("reticulate")
+
+use_condaenv("reticulate")
 
 TRAIN_DT <- as.Date("2021-01-01")
 
@@ -76,16 +73,15 @@ binclass_model %>%
   layer_dense(units = 2, activation = "sigmoid")
 
 # Network config
-history <- 
-  binclass_model %>% 
-  compile(
+binclass_model %>% 
+  keras::compile(
     loss = "binary_crossentropy",
     optimizer = "adam",
     metrics = c("accuracy")
   )
 
 # Running our data
-binclass_model %>% fit(
+binclass_model %>% keras::fit(
   X_train, y_train, 
   epochs = 20, 
   batch_size = 1000,
@@ -94,7 +90,7 @@ binclass_model %>% fit(
 summary(binclass_model)
 
 # Calculating accuracy
-binclass_model %>% predict_proba(object = ., x = X_test)
+binclass_model %>% keras::predict_classes(X_test)
 
 evaluation <- 
   binclass_model %>% evaluate(
