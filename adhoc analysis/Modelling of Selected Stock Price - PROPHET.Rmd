@@ -1,0 +1,223 @@
+---
+title: "Modelling of Selected Stock Price"
+subtitle: "Using Facebook Prophet Model"
+output: html_document
+---
+
+# Setup
+```{r setup, include = F, echo = T}
+library(dplyr)
+library(data.table)
+library(prophet)
+
+TRAIN_DT <- as.Date("2021-01-01")
+
+if (as.character(Sys.info()["nodename"]) == "ND0151MB") {
+  board_nm <- "Portfolio Management"
+}
+
+if (as.character(Sys.info()["nodename"]) == "copernicus64gb") {
+  board_nm <- "Portfolio Management (Copernicus)"
+}
+
+if (!(as.character(Sys.info()["nodename"]) %in% c("copernicus64gb", "ND0151MB"))) {
+  board_nm <- "Portfolio Management"
+}
+```
+
+## Load Modelling Data for `MasterCard`, i.e. `MA`
+```{r Modelling Data}
+# ----- Register Board -----
+pins::board_register_local(name = board_nm)
+
+# ----- Load Data -----
+modelling_data <- 
+  
+  # - Download Data
+  pins::pin_get("modelling_data_1.05_ret_10_wind", board_nm) %>% 
+  as.data.frame() %>% 
+  
+  # create factor TARGET
+  dplyr::mutate(
+    target = as.factor(dplyr::if_else(target_10w > 0, "Over", "Under"))
+  ) %>% 
+  as.data.frame() %>% 
+  
+  # - split train/test
+  dplyr::mutate(
+    sample_type = dplyr::if_else(dt < TRAIN_DT, "Train", "Test")
+  ) %>% 
+  
+  # - Remove columns
+  dplyr::select(-open, -high, -low, -close, -p_adjusted, -volume) %>% 
+  dplyr::mutate_if(is.character, as.factor) %>% 
+  
+  # - Select specific ticker
+  dplyr::filter(ticker %in% c("MA")) %>% 
+  as.data.frame()
+```
+
+## Load Raw Data for `MA`
+```{r Raw Data}
+raw_data <- 
+  
+  # - Download Data
+  pins::pin_get("md_stock_prices", board_nm) %>% 
+  as.data.frame() %>% 
+  
+  # - Select specific ticker
+  dplyr::filter(ticker %in% c("MA") & volume > 0) %>% 
+  
+  # - Calculate Moving Averages
+  dplyr::arrange(dt) %>%
+  dplyr::mutate(
+    ma20 = zoo::rollmean(close, k = 20, fill = NA, align = "right"),
+    ma40 = zoo::rollmean(close, k = 40, fill = NA, align = "right"),
+    ma60 = zoo::rollmean(close, k = 60, fill = NA, align = "right"),
+    
+    lag_ma20 = dplyr::lag(ma20, n = 1),
+    lag_ma60 = dplyr::lag(ma60, n = 1),
+  ) %>% 
+  
+  # - Train Test Prediction
+  dplyr::arrange(desc(dt)) %>% 
+  dplyr::mutate(sample = dplyr::if_else(row_number() > 40, "Train", "Test")) %>% 
+  as.data.frame()
+```
+
+# General Visualization
+
+## `MA 20`, `MA 40` & `MA 60`
+```{r Moving Averages}
+ma_plot <-
+  ggplot(data = raw_data) +
+  geom_line(aes(x = dt, y = close, col = "Close Price")) +
+  geom_line(aes(x = dt, y = ma20, col = "MA 20")) +
+  geom_line(aes(x = dt, y = ma40, col = "MA 40")) +
+  geom_line(aes(x = dt, y = ma60, col = "MA 60")) +
+  
+  ggtitle("Close price with Moving averages") +
+  theme(legend.title = element_blank())
+plotly::ggplotly(ma_plot)
+```
+
+# Modelling using `prophet`
+
+## Trend Changes
+```{r}
+trend_change <- 
+  raw_data %>% 
+  dplyr::filter(sample == "Train") %>% 
+  na.omit() %>% 
+  dplyr::mutate(bear_trend = dplyr::if_else(lag_ma20 > lag_ma60 & ma20 < ma60, 1, 0)) %>% 
+  dplyr::mutate(bull_trend = dplyr::if_else(lag_ma20 < lag_ma60 & ma20 > ma60, 1, 0)) %>% 
+  dplyr::filter(bear_trend + bull_trend > 0) %>% 
+  dplyr::pull(dt)
+```
+
+## Develop Model for `MA 20`
+```{r ma20 prophet}
+ma20_prophet <- 
+  prophet(df = raw_data %>%
+            dplyr::rename(ds = dt,
+                          y = ma20) %>% 
+            dplyr::select(ds, y) %>% 
+            as.data.frame(), 
+          changepoints = trend_change,
+          fit = T)
+```
+
+## Develop Model for `MA 40`
+```{r ma40 prophet}
+ma40_prophet <- 
+  prophet(df = raw_data %>%
+            dplyr::rename(ds = dt,
+                          y = ma40) %>% 
+            dplyr::select(ds, y) %>% 
+            as.data.frame(), 
+          changepoints = trend_change,
+          fit = T)
+```
+
+## Develop Model for `MA 60`
+```{r ma60 prophet}
+ma60_prophet <- 
+  prophet(df = raw_data %>%
+            dplyr::rename(ds = dt,
+                          y = ma60) %>% 
+            dplyr::select(ds, y) %>% 
+            as.data.frame(),
+          changepoints = trend_change,
+          fit = T)
+```
+
+## Develop Model for `close`
+```{r close prophet}
+close_prophet <- 
+  prophet(df = raw_data %>%
+            dplyr::rename(ds = dt,
+                          y = close) %>% 
+            dplyr::select(ds, y) %>% 
+            as.data.frame(),
+          changepoints = trend_change,
+          fit = T)
+```
+
+## Combining Models
+```{r Combining Models}
+predeval_df <- 
+  predict(ma20_prophet, 
+          df = raw_data %>%
+            dplyr::select(dt, close) %>% 
+            dplyr::rename(ds = dt) %>% 
+            dplyr::select(ds) %>%
+            as.data.frame() %>% 
+            rbind(., data.frame(ds = seq.Date(from = max(raw_data$dt) + 1, length.out = 60, by = 1)))) %>% 
+  dplyr::select(ds, yhat) %>% 
+  dplyr::rename(y_ma20 = yhat) %>% 
+  as.data.frame() %>% 
+  
+  left_join(., predict(ma40_prophet, 
+                       df = raw_data %>%
+                         dplyr::select(dt, close) %>% 
+                         dplyr::rename(ds = dt) %>% 
+                         dplyr::select(ds) %>%
+                         as.data.frame() %>% 
+                         rbind(., data.frame(ds = seq.Date(from = max(raw_data$dt) + 1, length.out = 60, by = 1)))) %>% 
+              dplyr::select(ds, yhat) %>% 
+              dplyr::rename(y_ma40 = yhat) %>% 
+              as.data.frame()) %>% 
+  as.data.frame() %>% 
+  
+  left_join(., predict(ma60_prophet, 
+                       df = raw_data %>%
+                         dplyr::select(dt, close) %>% 
+                         dplyr::rename(ds = dt) %>% 
+                         dplyr::select(ds) %>%
+                         as.data.frame() %>% 
+                         rbind(., data.frame(ds = seq.Date(from = max(raw_data$dt) + 1, length.out = 60, by = 1)))) %>% 
+              dplyr::select(ds, yhat) %>% 
+              dplyr::rename(y_ma60 = yhat) %>% 
+              as.data.frame()) %>% 
+  as.data.frame() %>% 
+  
+  left_join(., predict(close_prophet, 
+                       df = raw_data %>%
+                         dplyr::select(dt, close) %>% 
+                         dplyr::rename(ds = dt) %>% 
+                         dplyr::select(ds) %>%
+                         as.data.frame() %>% 
+                         rbind(., data.frame(ds = seq.Date(from = max(raw_data$dt) + 1, length.out = 60, by = 1)))) %>% 
+              dplyr::select(ds, yhat) %>% 
+              dplyr::rename(y_close = yhat) %>% 
+              as.data.frame()) %>% 
+  as.data.frame() %>% 
+  
+  left_join(., raw_data %>%
+              dplyr::select(dt, close, sample) %>% 
+              dplyr::rename(ds = dt,
+                            y = close) %>% 
+              dplyr::arrange(desc(ds)) %>%
+              as.data.frame()) %>% 
+  as.data.frame()
+```
