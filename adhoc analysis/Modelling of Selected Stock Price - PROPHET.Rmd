@@ -9,6 +9,8 @@ output: html_document
 library(dplyr)
 library(data.table)
 library(prophet)
+library(ggplot2)
+library(tidymodels)
 
 TRAIN_DT <- as.Date("2021-01-01")
 
@@ -163,6 +165,42 @@ close_prophet <-
           fit = T)
 ```
 
+## Develop Model for `open`
+```{r open prophet}
+open_prophet <- 
+  prophet(df = raw_data %>%
+            dplyr::rename(ds = dt,
+                          y = open) %>% 
+            dplyr::select(ds, y) %>% 
+            as.data.frame(),
+          changepoints = trend_change,
+          fit = T)
+```
+
+## Develop Model for `high`
+```{r high prophet}
+high_prophet <- 
+  prophet(df = raw_data %>%
+            dplyr::rename(ds = dt,
+                          y = high) %>% 
+            dplyr::select(ds, y) %>% 
+            as.data.frame(),
+          changepoints = trend_change,
+          fit = T)
+```
+
+## Develop Model for `low`
+```{r low prophet}
+low_prophet <- 
+  prophet(df = raw_data %>%
+            dplyr::rename(ds = dt,
+                          y = low) %>% 
+            dplyr::select(ds, y) %>% 
+            as.data.frame(),
+          changepoints = trend_change,
+          fit = T)
+```
+
 ## Combining Models
 ```{r Combining Models}
 predeval_df <- 
@@ -213,6 +251,42 @@ predeval_df <-
               as.data.frame()) %>% 
   as.data.frame() %>% 
   
+  left_join(., predict(open_prophet, 
+                       df = raw_data %>%
+                         dplyr::select(dt, open) %>% 
+                         dplyr::rename(ds = dt) %>% 
+                         dplyr::select(ds) %>%
+                         as.data.frame() %>% 
+                         rbind(., data.frame(ds = seq.Date(from = max(raw_data$dt) + 1, length.out = 60, by = 1)))) %>% 
+              dplyr::select(ds, yhat) %>% 
+              dplyr::rename(y_open = yhat) %>% 
+              as.data.frame()) %>% 
+  as.data.frame() %>% 
+  
+  left_join(., predict(high_prophet, 
+                       df = raw_data %>%
+                         dplyr::select(dt, high) %>% 
+                         dplyr::rename(ds = dt) %>% 
+                         dplyr::select(ds) %>%
+                         as.data.frame() %>% 
+                         rbind(., data.frame(ds = seq.Date(from = max(raw_data$dt) + 1, length.out = 60, by = 1)))) %>% 
+              dplyr::select(ds, yhat) %>% 
+              dplyr::rename(y_high = yhat) %>% 
+              as.data.frame()) %>% 
+  as.data.frame() %>% 
+  
+  left_join(., predict(low_prophet, 
+                       df = raw_data %>%
+                         dplyr::select(dt, low) %>% 
+                         dplyr::rename(ds = dt) %>% 
+                         dplyr::select(ds) %>%
+                         as.data.frame() %>% 
+                         rbind(., data.frame(ds = seq.Date(from = max(raw_data$dt) + 1, length.out = 60, by = 1)))) %>% 
+              dplyr::select(ds, yhat) %>% 
+              dplyr::rename(y_low = yhat) %>% 
+              as.data.frame()) %>% 
+  as.data.frame() %>% 
+  
   left_join(., raw_data %>%
               dplyr::select(dt, close, sample) %>% 
               dplyr::rename(ds = dt,
@@ -220,4 +294,73 @@ predeval_df <-
               dplyr::arrange(desc(ds)) %>%
               as.data.frame()) %>% 
   as.data.frame()
+```
+
+# Prediction Performance
+```{r Performance}
+predeval_df %>% 
+  tidyr::gather(., "model", "pred_val", -ds, -y, -sample) %>% 
+  na.omit() %>% 
+  dplyr::group_by(model) %>% 
+  dplyr::summarise(
+    rmse = rmse_vec(y, pred_val, na_rm = T),
+    mae = mae_vec(y, pred_val, na_rm = T),
+    mape = mape_vec(y, pred_val, na_rm = T),
+  ) %>% 
+  as.data.frame() %>% 
+  DT::datatable(extensions = "Buttons",
+                filter = "top",
+                options = list(dom = "Blfrtip",
+                               buttons = c("copy", "csv", "excel"),
+                               lengthMenu = list(c(10, 25, 50, -1),
+                                                 c(10, 25, 50, "All"))))
+
+```
+
+# Prediction of returns for upcoming `X` days
+```{r Returns}
+
+predeval_df %>% 
+  dplyr::filter(is.na(sample)) %>% 
+  dplyr::select(-y, -sample) %>% 
+  tidyr::gather(., "model", "pred_val", -ds) %>% 
+  dplyr::mutate(
+    last_close = predeval_df %>% 
+      na.omit() %>% 
+      dplyr::arrange(desc(ds)) %>% 
+      dplyr::slice(1) %>% 
+      pull(y)) %>% 
+  tidyr::crossing(., data.frame("days_window" = c(20, 40, 60))) %>% 
+  as.data.frame() %>% 
+  
+  dplyr::group_by(model, days_window) %>% 
+  dplyr::arrange(ds) %>% 
+  dplyr::mutate(rownum = dplyr::if_else(row_number() <= days_window, 1, 0)) %>% 
+  as.data.frame() %>% 
+  
+  dplyr::filter(rownum == 1) %>% 
+  dplyr::select(-rownum) %>% 
+  as.data.frame() %>% 
+  
+  dplyr::group_by(model, days_window) %>% 
+  dplyr::summarise(
+    avg_ret = mean((pred_val - last_close)/last_close),
+    min_ret = min((pred_val - last_close)/last_close),
+    max_ret = max((pred_val - last_close)/last_close),
+    sd_ret = sd((pred_val - last_close)/last_close),
+  ) %>% 
+  as.data.frame() %>% 
+  DT::datatable(extensions = "Buttons",
+                filter = "top",
+                options = list(dom = "Blfrtip",
+                               buttons = c("copy", "csv", "excel"),
+                               lengthMenu = list(c(10, 25, 50, -1),
+                                                 c(10, 25, 50, "All"))))
+
+predeval_df %>% 
+  # dplyr::filter(is.na(sample)) %>%
+  dplyr::select(y_close, y_ma20, y_ma40, y_ma60) %>% 
+  as.data.frame() %>% 
+  cor()
+
 ```
