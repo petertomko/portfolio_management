@@ -1,0 +1,126 @@
+---
+title: "Testing for Mean Reversion"
+subtitle: "Using Augmented Dickey Fuller Test"
+output: html_document
+---
+
+# Setup
+```{r setup, include = F, echo = T}
+library(dplyr)
+library(data.table)
+library(pins)
+
+TRAIN_DT <- as.Date("2021-01-01")
+
+if (as.character(Sys.info()["nodename"]) == "ND0151MB") {
+  board_nm <- "Portfolio Management"
+}
+
+if (as.character(Sys.info()["nodename"]) == "copernicus64gb") {
+  board_nm <- "Portfolio Management (Copernicus)"
+}
+
+if (!(as.character(Sys.info()["nodename"]) %in% c("copernicus64gb", "ND0151MB"))) {
+  board_nm <- "Portfolio Management"
+}
+
+# ----- Register Board -----
+pins::board_register_local(name = board_nm)
+
+```
+
+## Load Raw Data
+```{r Raw Data}
+raw_data <- 
+  
+  # - Download Data
+  pins::pin_get("md_stock_prices", board_nm) %>% 
+  as.data.frame() %>% 
+  
+  # - Select specific ticker
+  dplyr::filter(volume > 0) %>% 
+  
+  # - Calculate Moving Averages
+  dplyr::group_by(ticker) %>% 
+  dplyr::arrange(dt) %>%
+  dplyr::mutate(
+    ma20 = zoo::rollmean(close, k = 20, fill = NA, align = "right"),
+    ma40 = zoo::rollmean(close, k = 40, fill = NA, align = "right"),
+    ma60 = zoo::rollmean(close, k = 60, fill = NA, align = "right"),
+  ) %>% 
+  as.data.frame() %>% 
+  
+  dplyr::select(dt, ticker, open, high, low, close, p_adjusted, close, ma20, ma40, ma60) %>% 
+  tidyr::gather(., "model", "values", -dt, -ticker) %>% 
+  as.data.frame()
+```
+
+# ADF Test
+```{r ADF Test, warning=F, comment=F, error=F}
+adf_test_out <-
+  raw_data %>% 
+  na.omit() %>% 
+  
+  dplyr::group_by(ticker) %>% 
+  dplyr::mutate(n_rows = n()) %>% 
+  dplyr::filter(n_rows > 100) %>% 
+  as.data.frame() %>% 
+  
+  dplyr::group_by(ticker, model) %>% 
+  tidyr::nest() %>% 
+  
+  dplyr::group_by(ticker, model) %>% 
+  dplyr::mutate(
+    adf_test = purrr::map(data, function(ts) as.numeric(tseries::adf.test(ts$values, k = 1)$statistic)),
+    n_obs = purrr::map(data, function(ts) length(ts$values))
+  ) %>% 
+  dplyr::select(-data) %>% 
+  tidyr::unnest(c(adf_test, n_obs)) %>% 
+  rowwise() %>% 
+  dplyr::mutate(
+    p_val = dt(x = adf_test, df = n_obs),
+    test_interpretation = dplyr::if_else(p_val < 0.01, "Mean Reversion TS at 1%", dplyr::if_else(p_val >= 0.01 & p_val < 0.05, "Mean Reversion TS at 5%", dplyr::if_else(p_val >= 0.05 & p_val < 0.1, "Mean Reversion TS at 10%", "Possible Random Walk")))) %>% 
+  as.data.frame()
+
+adf_test_out %>%
+  as.data.frame() %>% 
+  dplyr::mutate_if(is.numeric, round, 4) %>% 
+  dplyr::rename(
+    `ADF Test Statistic` = adf_test,
+    `N Observations` = n_obs,
+    `p - Value` = p_val,
+    `Test Interpretation` = test_interpretation,
+  ) %>% 
+  DT::datatable(extensions = "Buttons",
+                filter = "top",
+                options = list(dom = "Blfrtip",
+                               buttons = c("copy", "csv", "excel"),
+                               lengthMenu = list(c(10, 25, 50, -1),
+                                                 c(10, 25, 50, "All"))))
+```
+## Summary of ADF Test
+```{r Summary}
+adf_test_out %>% 
+  dplyr::group_by(model, test_interpretation) %>% 
+  dplyr::summarise(`Total Stocks` = n()) %>%
+  dplyr::rename(Model = model,
+                `Test Interpretation` = test_interpretation) %>% 
+  as.data.frame() %>% 
+  DT::datatable(extensions = "Buttons",
+                filter = "top",
+                options = list(dom = "Blfrtip",
+                               buttons = c("copy", "csv", "excel"),
+                               lengthMenu = list(c(10, 25, 50, -1),
+                                                 c(10, 25, 50, "All"))))
+
+```
+
+# Save ADF Test results
+```{r Save}
+adf_test_out %>% 
+    pins::pin(x = .,
+            name = "adf_test_result",
+            board = board_nm, 
+            description = "Augmented Dickey Fuller Test")
+
+```
