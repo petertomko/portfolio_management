@@ -1,0 +1,159 @@
+---
+title: "Stationarity Test"
+subtitle: "Using Hurst Exponent"
+output: html_document
+---
+
+# Setup
+```{r setup, include = F, echo = T}
+library(dplyr)
+library(data.table)
+library(pins)
+
+TRAIN_DT <- as.Date("2021-01-01")
+
+if (as.character(Sys.info()["nodename"]) == "ND0151MB") {
+  board_nm <- "Portfolio Management"
+}
+
+if (as.character(Sys.info()["nodename"]) == "copernicus64gb") {
+  board_nm <- "Portfolio Management (Copernicus)"
+}
+
+if (!(as.character(Sys.info()["nodename"]) %in% c("copernicus64gb", "ND0151MB"))) {
+  board_nm <- "Portfolio Management"
+}
+
+# ----- Register Board -----
+pins::board_register_local(name = board_nm)
+
+```
+
+## Load Raw Data
+```{r Raw Data}
+raw_data <- 
+  
+  # - Download Data
+  pins::pin_get("md_stock_prices", board_nm) %>% 
+  as.data.frame() %>% 
+  
+  # - Select specific ticker
+  dplyr::filter(volume > 0) %>% 
+  
+  # - Calculate Moving Averages
+  dplyr::group_by(ticker) %>% 
+  dplyr::arrange(dt) %>%
+  dplyr::mutate(
+    ma20 = zoo::rollmean(close, k = 20, fill = NA, align = "right"),
+    ma40 = zoo::rollmean(close, k = 40, fill = NA, align = "right"),
+    ma60 = zoo::rollmean(close, k = 60, fill = NA, align = "right"),
+  ) %>% 
+  as.data.frame() %>% 
+  
+  dplyr::select(dt, ticker, open, high, low, close, p_adjusted, close, ma20, ma40, ma60) %>% 
+  tidyr::gather(., "model", "values", -dt, -ticker) %>% 
+  as.data.frame()
+```
+
+# Hurst Exponent
+
+## Function Development
+```{r Function}
+
+getHurst <- function(x) {
+  
+  # x <- hurst_out$data[[1]]
+  
+  out_df <- x %>% 
+    tidyr::crossing(., data.frame("lags_val" = c(2:100))) %>% 
+    dplyr::group_by(lags_val) %>% 
+    tidyr::nest() %>% 
+    dplyr::group_by(lags_val) %>% 
+    dplyr::mutate(lag_val = purrr::map2(data, lags_val, function(df, get_lag){
+      df %>% 
+        dplyr::arrange(dt) %>% 
+        dplyr::mutate(lag_val = dplyr::lag(values, get_lag)) %>% 
+        na.omit() %>% 
+        as.data.frame()
+    })) %>% 
+    dplyr::select(-data) %>% 
+    tidyr::unnest(c(lag_val)) %>% 
+    dplyr::group_by(lags_val) %>% 
+    dplyr::summarise(tau = sqrt(sd(values - lag_val))) %>% 
+    as.data.frame()
+  
+  hurst_model <- lm(log(tau) ~ log(lags_val), data = out_df)
+  
+  return(as.numeric(coef(hurst_model))[2] * 2)
+}
+
+```
+
+```{r Hurst, warning=F, comment=F, error=F}
+hurst_out <-
+  raw_data %>% 
+  na.omit() %>% 
+  
+  dplyr::group_by(ticker) %>% 
+  dplyr::mutate(n_rows = n()) %>% 
+  dplyr::filter(n_rows > 100) %>% 
+  as.data.frame() %>% 
+  
+  dplyr::group_by(ticker, model) %>% 
+  tidyr::nest() %>% 
+  
+  dplyr::group_by(ticker, model) %>% 
+  dplyr::mutate(
+    hurst_test = purrr::map(data, function(ts) getHurst(ts)),
+    n_obs = purrr::map(data, function(ts) length(ts$values))
+  ) %>% 
+  dplyr::select(-data) %>% 
+  tidyr::unnest(c(hurst_test, n_obs)) %>% 
+  as.data.frame() %>% 
+  rowwise() %>% 
+  dplyr::mutate(
+    test_interpretation = dplyr::if_else(hurst_test <= 0.45, "Mean Reversion Stock", dplyr::if_else(hurst_test >= 0.55, "Trending Stock", "Possible Random Walk"))) %>% 
+  as.data.frame()
+
+hurst_out %>%
+  as.data.frame() %>% 
+  dplyr::mutate_if(is.numeric, round, 4) %>% 
+  dplyr::rename(
+    `Hurst Exponent` = hurst_test,
+    `N Observations` = n_obs,
+    `Test Interpretation` = test_interpretation,
+  ) %>% 
+  DT::datatable(extensions = "Buttons",
+                filter = "top",
+                options = list(dom = "Blfrtip",
+                               buttons = c("copy", "csv", "excel"),
+                               lengthMenu = list(c(10, 25, 50, -1),
+                                                 c(10, 25, 50, "All"))))
+```
+
+## Summary of Stationarity Test
+```{r Summary}
+hurst_out %>% 
+  dplyr::group_by(model, test_interpretation) %>% 
+  dplyr::summarise(`Total Stocks` = n()) %>%
+  dplyr::rename(Model = model,
+                `Test Interpretation` = test_interpretation) %>% 
+  as.data.frame() %>% 
+  DT::datatable(extensions = "Buttons",
+                filter = "top",
+                options = list(dom = "Blfrtip",
+                               buttons = c("copy", "csv", "excel"),
+                               lengthMenu = list(c(10, 25, 50, -1),
+                                                 c(10, 25, 50, "All"))))
+
+```
+
+# Save Hurst Exponent results
+```{r Save}
+hurst_out %>% 
+  pins::pin(x = .,
+            name = "hurst_result",
+            board = board_nm, 
+            description = "Stationarity Test")
+
+```
