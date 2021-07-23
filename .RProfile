@@ -36,9 +36,6 @@
   # dates
   library("lubridate")
   
-  # output
-  library("xlsx")
-  
   # web
   library("httr")
   
@@ -47,4 +44,21 @@
   
   # set ggplot2 theme
   theme_set(theme_minimal())
+  
+  cat("\nWelcome at", date(), "\n")
 }
+
+library("dplyr")
+library("data.table")
+
+# ----- Define Data Sets -----
+data_setup <- 
+  expand.grid(
+    "return_target" = c(1.01, 1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1),
+    "return_window" = c(10, 20, 40, 60)
+  ) %>% 
+  as.data.frame()
+
+# ----- Set Board Name -----
+board_nm <- "Portfolio Management"
+home_dir <- "C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/"
