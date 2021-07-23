@@ -7,33 +7,13 @@ library("dplyr")
 library("data.table")
 
 # ----- Connect to Board -----
-if (as.character(Sys.info()["nodename"]) == "ND0151MB") {
-  board_nm <- "Portfolio Management"
-  pins::board_register_local(name = "Portfolio Management")
-  
-  # ----- Read Tickers -----
-  list_cp <- 
-    read_excel("0 data download/patria tickers/MarginCP.xlsx", 
-               skip = 2) %>% 
-    pins::pin(x = ., name = "MarginCP", board = "Portfolio Management")
-}
+pins::board_register_local(name = board_nm)
 
-if (as.character(Sys.info()["nodename"]) == "copernicus64gb") {
-  board_nm <- "Portfolio Management (Copernicus)"
-  pins::board_register_local(name = "Portfolio Management (Copernicus)")
-  
-  # ----- Read Tickers -----
-  list_cp <- 
-    read_excel("0 data download/patria tickers/MarginCP.xlsx", 
-               skip = 2) %>% 
-    pins::pin(x = ., name = "MarginCP", board = "Portfolio Management (Copernicus)")
-}
-
-if (!(as.character(Sys.info()["nodename"]) %in% c("copernicus64gb", "ND0151MB"))) {
-  board_nm <- "Portfolio Management"
-  pins::board_register_local(name = "Portfolio Management (Other)")
-  
-}
+# ----- Read Tickers -----
+list_cp <- 
+  read_excel("0 data download/patria tickers/MarginCP.xlsx", 
+             skip = 2) %>% 
+  pins::pin(x = ., name = "MarginCP", board = board_nm)
 
 # ----- set dates -----
 first.date <- as.Date("2016-01-01")
