@@ -1,15 +1,39 @@
 # ----- Loading Library -----
+library("tidyquant")
+library("BatchGetSymbols")
 library("readr")
 library("readxl")
+library("dplyr")
+library("data.table")
 
 # ----- Connect to Board -----
-pins::board_register_local(name = "Portfolio Management")
+if (as.character(Sys.info()["nodename"]) == "ND0151MB") {
+  board_nm <- "Portfolio Management"
+  pins::board_register_local(name = "Portfolio Management")
+  
+  # ----- Read Tickers -----
+  list_cp <- 
+    read_excel("0 data download/patria tickers/MarginCP.xlsx", 
+               skip = 2) %>% 
+    pins::pin(x = ., name = "MarginCP", board = "Portfolio Management")
+}
 
-# ----- Read Tickers -----
-list_cp <- 
-  read_excel("0 data download/patria tickers/MarginCP.xlsx", 
-             skip = 2) %>% 
-  pins::pin(x = ., name = "MarginCP", board = "Portfolio Management")
+if (as.character(Sys.info()["nodename"]) == "copernicus64gb") {
+  board_nm <- "Portfolio Management (Copernicus)"
+  pins::board_register_local(name = "Portfolio Management (Copernicus)")
+  
+  # ----- Read Tickers -----
+  list_cp <- 
+    read_excel("0 data download/patria tickers/MarginCP.xlsx", 
+               skip = 2) %>% 
+    pins::pin(x = ., name = "MarginCP", board = "Portfolio Management (Copernicus)")
+}
+
+if (!(as.character(Sys.info()["nodename"]) %in% c("copernicus64gb", "ND0151MB"))) {
+  board_nm <- "Portfolio Management"
+  pins::board_register_local(name = "Portfolio Management (Other)")
+  
+}
 
 # ----- set dates -----
 first.date <- as.Date("2016-01-01")
@@ -86,8 +110,6 @@ modelling_data <-
   # replace missing volumes
   dplyr::mutate(volume = dplyr::if_else(is.na(volume), 0, volume)) %>% 
   
-  # ----- FILLING -----
-  
   # backward fill
   dplyr::group_by(ticker) %>% 
   dplyr::arrange(dt) %>% 
@@ -102,5 +124,5 @@ modelling_data <-
   as.data.frame() %>% 
   pins::pin(x = .,
             name = "md_stock_prices",
-            board = "Portfolio Management", 
+            board = board_nm, 
             description = "Stock Price Data")
