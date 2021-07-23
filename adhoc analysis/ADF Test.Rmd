@@ -10,69 +10,41 @@ library(dplyr)
 library(data.table)
 library(pins)
 
-TRAIN_DT <- as.Date("2021-01-01")
-
-if (as.character(Sys.info()["nodename"]) == "ND0151MB") {
-  board_nm <- "Portfolio Management"
-}
-
-if (as.character(Sys.info()["nodename"]) == "copernicus64gb") {
-  board_nm <- "Portfolio Management (Copernicus)"
-}
-
-if (!(as.character(Sys.info()["nodename"]) %in% c("copernicus64gb", "ND0151MB"))) {
-  board_nm <- "Portfolio Management"
-}
+board_nm <- "Portfolio Management"
 
 # ----- Register Board -----
 pins::board_register_local(name = board_nm)
 
+# ----- Load Data Preparator -----
+source("C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management/1 variable preparation/Data Preparation for Prophet.R")
 ```
 
 ## Load Raw Data
 ```{r Raw Data}
-raw_data <- 
-  
-  # - Download Data
-  pins::pin_get("md_stock_prices", board_nm) %>% 
-  as.data.frame() %>% 
-  
-  # - Select specific ticker
-  dplyr::filter(volume > 0) %>% 
-  
-  # - Calculate Moving Averages
-  dplyr::group_by(ticker) %>% 
-  dplyr::arrange(dt) %>%
-  dplyr::mutate(
-    ma20 = zoo::rollmean(close, k = 20, fill = NA, align = "right"),
-    ma40 = zoo::rollmean(close, k = 40, fill = NA, align = "right"),
-    ma60 = zoo::rollmean(close, k = 60, fill = NA, align = "right"),
-  ) %>% 
-  as.data.frame() %>% 
-  
-  dplyr::select(dt, ticker, open, high, low, close, p_adjusted, close, ma20, ma40, ma60) %>% 
-  tidyr::gather(., "model", "values", -dt, -ticker) %>% 
-  as.data.frame()
+raw_data <- prophetDataPreparator$new()
+raw_data$add_pars(board_nm = "Portfolio Management", 
+                  ma_list = c(20, 40, 60, 120))
+raw_data$transform()
 ```
 
 # ADF Test
 ```{r ADF Test, warning=F, comment=F, error=F}
 adf_test_out <-
-  raw_data %>% 
+  raw_data$modelling_df %>% 
   na.omit() %>% 
   
-  dplyr::group_by(ticker) %>% 
+  dplyr::group_by(ticker, price_type, ma_type) %>% 
   dplyr::mutate(n_rows = n()) %>% 
   dplyr::filter(n_rows > 100) %>% 
   as.data.frame() %>% 
   
-  dplyr::group_by(ticker, model) %>% 
+  dplyr::group_by(ticker, price_type, ma_type) %>% 
   tidyr::nest() %>% 
   
-  dplyr::group_by(ticker, model) %>% 
+  dplyr::group_by(ticker, price_type, ma_type) %>% 
   dplyr::mutate(
-    adf_test = purrr::map(data, function(ts) as.numeric(tseries::adf.test(ts$values, k = 1)$statistic)),
-    n_obs = purrr::map(data, function(ts) length(ts$values))
+    adf_test = purrr::map(data, function(ts) as.numeric(tseries::adf.test(ts$y, k = 1)$statistic)),
+    n_obs = purrr::map(data, function(ts) length(ts$y))
   ) %>% 
   dplyr::select(-data) %>% 
   tidyr::unnest(c(adf_test, n_obs)) %>% 
@@ -101,9 +73,10 @@ adf_test_out %>%
 ## Summary of ADF Test
 ```{r Summary}
 adf_test_out %>% 
-  dplyr::group_by(model, test_interpretation) %>% 
+  dplyr::group_by(price_type, ma_type, test_interpretation) %>% 
   dplyr::summarise(`Total Stocks` = n()) %>%
-  dplyr::rename(Model = model,
+  dplyr::rename(`Price Type` = price_type,
+                `MA Type` = ma_type,
                 `Test Interpretation` = test_interpretation) %>% 
   as.data.frame() %>% 
   DT::datatable(extensions = "Buttons",
@@ -118,7 +91,7 @@ adf_test_out %>%
 # Save ADF Test results
 ```{r Save}
 adf_test_out %>% 
-    pins::pin(x = .,
+  pins::pin(x = .,
             name = "adf_test_result",
             board = board_nm, 
             description = "Augmented Dickey Fuller Test")
