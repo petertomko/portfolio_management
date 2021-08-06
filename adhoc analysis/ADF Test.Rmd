@@ -6,9 +6,9 @@ output: html_document
 
 # Setup
 ```{r setup, include = F, echo = T}
-library(dplyr)
-library(data.table)
-library(pins)
+library("dplyr")
+library("data.table")
+library("pins")
 
 board_nm <- "Portfolio Management"
 
@@ -19,16 +19,16 @@ pins::board_register_local(name = board_nm)
 source("C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management/1 variable preparation/Data Preparation for Prophet.R")
 ```
 
-## Load Raw Data
-```{r Raw Data}
+## Load Raw Data & Prepare for Prophet Model
+```{r Raw Data, warning = F, comment = F, error = F}
 raw_data <- prophetDataPreparator$new()
 raw_data$add_pars(board_nm = "Portfolio Management", 
                   ma_list = c(20, 40, 60, 120))
 raw_data$transform()
 ```
 
-# ADF Test
-```{r ADF Test, warning=F, comment=F, error=F}
+# run ADF Test
+```{r ADF Test, warning = F, comment = F, error = F}
 adf_test_out <-
   raw_data$modelling_df %>% 
   na.omit() %>% 
@@ -71,7 +71,7 @@ adf_test_out %>%
                                                  c(10, 25, 50, "All"))))
 ```
 ## Summary of ADF Test
-```{r Summary}
+```{r Summary, warning = F, comment = F, error = F}
 adf_test_out %>% 
   dplyr::group_by(price_type, ma_type, test_interpretation) %>% 
   dplyr::summarise(`Total Stocks` = n()) %>%
@@ -89,7 +89,7 @@ adf_test_out %>%
 ```
 
 # Save ADF Test results
-```{r Save}
+```{r Save, warning = F, comment = F, error = F}
 adf_test_out %>% 
   pins::pin(x = .,
             name = "adf_test_result",

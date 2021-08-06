@@ -6,21 +6,21 @@ output: html_document
 
 # Setup
 ```{r setup, include = F, echo = T}
-library(dplyr)
-library(data.table)
-library(pins)
+library("dplyr")
+library("data.table")
+library("pins")
 
 board_nm <- "Portfolio Management"
 
 # ----- Register Board -----
 pins::board_register_local(name = board_nm)
 
-# ----- Load Data Preparator -----
+# ----- Load Data Preparation -----
 source("C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management/1 variable preparation/Data Preparation for Prophet.R")
 ```
 
 ## Load Raw Data
-```{r Raw Data}
+```{r Raw Data, warning = F, comment = F, error = F}
 raw_data <- prophetDataPreparator$new()
 raw_data$add_pars(board_nm = "Portfolio Management", 
                   ma_list = c(20, 40, 60, 120))
@@ -30,7 +30,7 @@ raw_data$transform()
 # Hurst Exponent
 
 ## Function Development
-```{r Function}
+```{r Function, warning = F, comment = F, error = F}
 
 getHurst <- function(x) {
   
@@ -61,7 +61,8 @@ getHurst <- function(x) {
 
 ```
 
-```{r Hurst, warning=F, comment=F, error=F}
+## Run Hurst Computation
+```{r Hurst Computation, warning = F, comment = F, error = F}
 hurst_out <-
   raw_data$modelling_df %>% 
   na.omit() %>% 
@@ -104,7 +105,7 @@ hurst_out %>%
 ```
 
 ## Summary of Stationarity Test
-```{r Summary}
+```{r Summary, warning = F, comment = F, error = F}
 hurst_out %>% 
   dplyr::group_by(price_type, ma_type, test_interpretation) %>% 
   dplyr::summarise(`Total Stocks` = n()) %>%
@@ -122,11 +123,10 @@ hurst_out %>%
 ```
 
 # Save Hurst Exponent results
-```{r Save}
+```{r Save, warning = F, comment = F, error = F}
 hurst_out %>% 
   pins::pin(x = .,
             name = "hurst_result",
             board = board_nm, 
             description = "Stationarity Test")
-
 ```
