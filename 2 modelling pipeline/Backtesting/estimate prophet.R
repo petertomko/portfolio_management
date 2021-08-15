@@ -1,15 +1,16 @@
-library(lubridate)
+library("multidplyr")
+library("lubridate")
 
 board_nm <- "Portfolio Management"
 
 # ----- Register Board -----
 pins::board_register_local(name = board_nm)
 
-# ----- Load Data Preparator -----
-source("C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management/1 variable preparation/Data Preparation for Prophet.R")
-source("C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management/2 modelling pipeline/Backtesting/dates of rebalancing.R")
+# ----- Load Data Preparation -----
+source("./1 variable preparation/Data Preparation for Prophet.R")
+source("./2 modelling pipeline/Backtesting/dates of rebalancing.R")
 
-# - Load Raw Data
+# ----- Prepare Data for Prophet -----
 raw_data <- prophetDataPreparator$new()
 raw_data$add_pars(board_nm = board_nm, 
                   ma_list = c(20, 40, 60, 120))
@@ -18,12 +19,12 @@ raw_data$transform()
 # ---- Load ADF and Hurst Results ----
 stocks_selected <-
   pins::pin_get("adf_test_result", board_nm) %>% 
-  dplyr::select(ticker, price_type, ma_type, test_interpretation) %>% 
+  dplyr::select(ticker, price_type, test_interpretation) %>% 
   dplyr::rename(adf_interpretation = test_interpretation) %>% 
   as.data.frame() %>% 
   
   left_join(., pins::pin_get("hurst_result", board_nm) %>% 
-              dplyr::select(ticker, price_type, ma_type, test_interpretation) %>% 
+              dplyr::select(ticker, price_type, test_interpretation) %>% 
               dplyr::rename(hurst_interpretation = test_interpretation) %>% 
               as.data.frame()) %>% 
   
@@ -44,7 +45,7 @@ stocks_selected <-
   as.data.frame() %>% 
   
   dplyr::filter(is_good == 1) %>% 
-  dplyr::select(ticker, price_type, ma_type) %>% 
+  dplyr::select(ticker, price_type) %>% 
   as.data.frame()
 
 # ----- Subset Relevant Stocks -----
@@ -53,14 +54,14 @@ modelling_df <-
   # - Get only relevant stocks
   stocks_selected %>% 
   left_join(., raw_data$modelling_df) %>% 
-  dplyr::group_by(ticker, price_type, ma_type) %>%
+  dplyr::group_by(ticker, price_type) %>%
   tidyr::nest() %>%
   
   # - get rebalancing dates
   tidyr::crossing(., rebalancing_dates) %>% 
   
   # - create train/test data
-  dplyr::group_by(ticker, price_type, ma_type, created_at) %>%
+  dplyr::group_by(ticker, price_type, created_at) %>%
   dplyr::mutate(
     train_df = purrr::map(data, function(df){
       
@@ -81,20 +82,26 @@ modelling_df <-
   as.data.frame()
 
 # ----- Estimate Prophet Model -----
-library(multidplyr)
-cluster <- multidplyr::new_cluster(4)
+cluster <- multidplyr::new_cluster(8)
 multidplyr::cluster_library(cluster, c("prophet", "data.table", "dplyr"))
 modelling_df <-
   modelling_df %>% 
-  dplyr::group_by(ticker, price_type, ma_type, created_at) %>%
+  # slice(1:10) %>%
+  dplyr::group_by(ticker, price_type, created_at) %>%
   partition(cluster) %>% 
   dplyr::mutate(
     prophet_model = purrr::map(train_df, function(df){
       
-      prophet::prophet(
-        df = df, growth = "linear", fit = T
-      )
+      # df <- modelling_df$train_df[[1]]
       
+      m <- prophet::prophet()
+      m <- add_regressor(m, "ma_type_20", mode = "additive")
+      m <- add_regressor(m, "ma_type_40", mode = "additive")
+      m <- add_regressor(m, "ma_type_60", mode = "additive")
+      m <- add_regressor(m, "ma_type_120", mode = "additive")
+      m <- fit.prophet(m, df)
+      
+      return(m)
     })
   ) %>% 
   collect()
@@ -102,18 +109,38 @@ modelling_df <-
 # ----- Predict Model -----
 modelling_df <-
   modelling_df %>% 
-  dplyr::group_by(ticker, price_type, ma_type, created_at) %>%
+  dplyr::group_by(ticker, price_type, created_at) %>%
+  partition(cluster) %>% 
   dplyr::mutate(
-    eva_df = purrr::map2(prophet_model, test_df, function(mdl, df){
+    train_eval_df = purrr::map2(prophet_model, train_df, function(mdl, df){
       
       df %>% 
         left_join(., predict(mdl, 
                              df = df %>%
-                               dplyr::select(ds) %>% 
+                               dplyr::select(ds, ma_type_20, ma_type_40, ma_type_60, ma_type_120) %>% 
                                as.data.frame()) %>% 
+                    dplyr::select(-ma_type_20, -ma_type_40, -ma_type_60, -ma_type_120) %>% 
                     as.data.frame()
         ) %>% 
         as.data.frame()
       
-    })
-  )
+    }),
+    
+    test_eval_df = purrr::map2(prophet_model, test_df, function(mdl, df){
+      
+      df %>% 
+        left_join(., predict(mdl, 
+                             df = df %>%
+                               dplyr::select(ds, ma_type_20, ma_type_40, ma_type_60, ma_type_120) %>% 
+                               as.data.frame()) %>% 
+                    dplyr::select(-ma_type_20, -ma_type_40, -ma_type_60, -ma_type_120) %>% 
+                    as.data.frame()
+        ) %>% 
+        as.data.frame()
+      
+    }),
+  ) %>% 
+  collect()
+
+# ----- Write to Temporary Folder -----
+save(modelling_df, file = "./tmp/estimated prophet model - tmp.RData")
