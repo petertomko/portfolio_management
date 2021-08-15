@@ -1,5 +1,5 @@
 rebalancing_dates <- 
-  expand.grid("year" = c(2017, 2018, 2019),
+  expand.grid("year" = c(2018, 2019, 2020),
               "month" = c(1:12)) %>% 
   rowwise() %>% 
   
