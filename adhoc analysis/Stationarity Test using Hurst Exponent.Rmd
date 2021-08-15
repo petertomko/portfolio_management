@@ -67,15 +67,15 @@ hurst_out <-
   raw_data$modelling_df %>% 
   na.omit() %>% 
   
-  dplyr::group_by(ticker, price_type, ma_type) %>% 
+  dplyr::group_by(ticker, price_type) %>% 
   dplyr::mutate(n_rows = n()) %>% 
   dplyr::filter(n_rows > 100) %>% 
   as.data.frame() %>% 
   
-  dplyr::group_by(ticker, price_type, ma_type) %>% 
+  dplyr::group_by(ticker, price_type) %>% 
   tidyr::nest() %>% 
   
-  dplyr::group_by(ticker, price_type, ma_type) %>% 
+  dplyr::group_by(ticker, price_type) %>% 
   dplyr::mutate(
     hurst_test = purrr::map(data, function(ts) getHurst(ts)),
     n_obs = purrr::map(data, function(ts) length(ts$values))
@@ -107,10 +107,9 @@ hurst_out %>%
 ## Summary of Stationarity Test
 ```{r Summary, warning = F, comment = F, error = F}
 hurst_out %>% 
-  dplyr::group_by(price_type, ma_type, test_interpretation) %>% 
+  dplyr::group_by(price_type, test_interpretation) %>% 
   dplyr::summarise(`Total Stocks` = n()) %>%
   dplyr::rename(`Price Type` = price_type,
-                `MA Type` = ma_type,
                 `Test Interpretation` = test_interpretation) %>% 
   as.data.frame() %>% 
   DT::datatable(extensions = "Buttons",

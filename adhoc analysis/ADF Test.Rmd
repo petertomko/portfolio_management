@@ -33,15 +33,15 @@ adf_test_out <-
   raw_data$modelling_df %>% 
   na.omit() %>% 
   
-  dplyr::group_by(ticker, price_type, ma_type) %>% 
+  dplyr::group_by(ticker, price_type) %>% 
   dplyr::mutate(n_rows = n()) %>% 
   dplyr::filter(n_rows > 100) %>% 
   as.data.frame() %>% 
   
-  dplyr::group_by(ticker, price_type, ma_type) %>% 
+  dplyr::group_by(ticker, price_type) %>% 
   tidyr::nest() %>% 
   
-  dplyr::group_by(ticker, price_type, ma_type) %>% 
+  dplyr::group_by(ticker, price_type) %>% 
   dplyr::mutate(
     adf_test = purrr::map(data, function(ts) as.numeric(tseries::adf.test(ts$y, k = 1)$statistic)),
     n_obs = purrr::map(data, function(ts) length(ts$y))
@@ -73,10 +73,9 @@ adf_test_out %>%
 ## Summary of ADF Test
 ```{r Summary, warning = F, comment = F, error = F}
 adf_test_out %>% 
-  dplyr::group_by(price_type, ma_type, test_interpretation) %>% 
+  dplyr::group_by(price_type, test_interpretation) %>% 
   dplyr::summarise(`Total Stocks` = n()) %>%
   dplyr::rename(`Price Type` = price_type,
-                `MA Type` = ma_type,
                 `Test Interpretation` = test_interpretation) %>% 
   as.data.frame() %>% 
   DT::datatable(extensions = "Buttons",
