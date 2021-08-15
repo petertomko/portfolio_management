@@ -22,6 +22,7 @@ prophetDataPreparator <- R6::R6Class(
         
         # - Download Data
         pins::pin_get("md_stock_prices", self$board_nm) %>% 
+        # dplyr::filter(ticker %in% c("AAL", "X")) %>%
         as.data.frame() %>% 
         
         # - Select specific ticker
@@ -30,6 +31,9 @@ prophetDataPreparator <- R6::R6Class(
         # - Gather to create price type column
         dplyr::select(dt, ticker, open, high, low, close, p_adjusted) %>% 
         tidyr::gather(., "price_type", "values", -dt, -ticker) %>% 
+        dplyr::distinct() %>% 
+        as.data.frame() %>% 
+        
         dplyr::group_by(ticker, price_type) %>%
         tidyr::nest() %>% 
         
@@ -42,22 +46,32 @@ prophetDataPreparator <- R6::R6Class(
           ma_price_df = purrr::map2(data, ma_type, function(df, ma){
             
             df %>% 
+              dplyr::ungroup() %>% 
               dplyr::arrange(dt) %>% 
               dplyr::mutate(
-                ma_price = zoo::rollmean(values, 
-                                         k = ma, 
-                                         fill = NA, 
-                                         align = "right")) %>% 
+                ma_price = 
+                  dplyr::lag(zoo::rollmean(values, 
+                                           k = ma, 
+                                           fill = NA, 
+                                           align = "right"), 
+                             n = (ma + 1))) %>% 
               as.data.frame()
             
           })
         ) %>% 
         dplyr::select(-data) %>% 
         tidyr::unnest(c(ma_price_df)) %>% 
+        rowwise() %>% 
+        dplyr::mutate(ma_type = paste("ma_type_", ma_type, sep = "")) %>%
+        dplyr::ungroup() %>% 
+        as.data.frame() %>% 
+        
+        tidyr::spread(., ma_type, ma_price) %>% 
+        as.data.frame() %>% 
         
         # - rename to fit PROPHET model
         dplyr::rename(ds = dt,
-                      y = ma_price) %>% 
+                      y = values) %>% 
         na.omit() %>% 
         as.data.frame()
       
