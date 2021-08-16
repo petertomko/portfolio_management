@@ -195,7 +195,7 @@ portfolio_returns_df <-
   # - portfolio results
   dplyr::left_join(., portfolio_tdf) %>% 
   
-  dplyr::mutate(weight = dplyr::if_else(weight < 0, 0, weight)) %>% 
+  dplyr::mutate(weight = dplyr::if_else(weight < 0.01, 0, weight)) %>% 
   dplyr::distinct() %>% 
   as.data.frame()
 
@@ -233,13 +233,13 @@ sqrt(252) * mean(portfolio_results_df$adj_returns)/(sd(portfolio_results_df$adj_
 # ----- Portfolio weights by Shares -----
 portfolio_weights <-
   portfolio_tdf %>% 
-  dplyr::mutate(weight = dplyr::if_else(weight < 0, 0, weight)) %>% 
+  dplyr::mutate(weight = dplyr::if_else(weight < 0.01, 0, weight)) %>% 
   tidyr::spread(., ticker, weight) %>% 
   as.data.frame()
 
 # ----- Distinct shares invested in over time -----
 portfolio_tdf %>% 
-  dplyr::mutate(weight = dplyr::if_else(weight < 0, 0, weight)) %>% 
+  dplyr::mutate(weight = dplyr::if_else(weight < 0.01, 0, weight)) %>% 
   dplyr::filter(weight > 0) %>% 
   dplyr::select(ticker) %>% 
   distinct()

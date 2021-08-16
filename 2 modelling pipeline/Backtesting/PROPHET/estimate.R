@@ -81,7 +81,7 @@ modelling_df <-
   ) %>% 
   as.data.frame()
 
-# ----- Estimate Prophet Model -----
+# ----- Estimate -----
 cluster <- multidplyr::new_cluster(8)
 multidplyr::cluster_library(cluster, c("prophet", "data.table", "dplyr"))
 modelling_df <-
@@ -90,7 +90,7 @@ modelling_df <-
   dplyr::group_by(ticker, price_type, created_at) %>%
   partition(cluster) %>% 
   dplyr::mutate(
-    prophet_model = purrr::map(train_df, function(df){
+    model = purrr::map(train_df, function(df){
       
       # df <- modelling_df$train_df[[1]]
       
@@ -106,13 +106,13 @@ modelling_df <-
   ) %>% 
   collect()
 
-# ----- Predict Model -----
+# ----- Predict -----
 modelling_df <-
   modelling_df %>% 
   dplyr::group_by(ticker, price_type, created_at) %>%
   partition(cluster) %>% 
   dplyr::mutate(
-    train_eval_df = purrr::map2(prophet_model, train_df, function(mdl, df){
+    train_eval_df = purrr::map2(model, train_df, function(mdl, df){
       
       df %>% 
         left_join(., predict(mdl, 
@@ -126,7 +126,7 @@ modelling_df <-
       
     }),
     
-    test_eval_df = purrr::map2(prophet_model, test_df, function(mdl, df){
+    test_eval_df = purrr::map2(model, test_df, function(mdl, df){
       
       df %>% 
         left_join(., predict(mdl, 
