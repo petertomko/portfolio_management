@@ -6,25 +6,14 @@ output: html_document
 
 # Setup
 ```{r setup, include = F, echo = T}
-library(dplyr)
-library(data.table)
-library(prophet)
-library(ggplot2)
-library(tidymodels)
+library("dplyr")
+library("data.table")
+library("prophet")
+library("ggplot2")
+library("tidymodels")
 
 TRAIN_DT <- as.Date("2021-01-01")
-
-if (as.character(Sys.info()["nodename"]) == "ND0151MB") {
-  board_nm <- "Portfolio Management"
-}
-
-if (as.character(Sys.info()["nodename"]) == "copernicus64gb") {
-  board_nm <- "Portfolio Management (Copernicus)"
-}
-
-if (!(as.character(Sys.info()["nodename"]) %in% c("copernicus64gb", "ND0151MB"))) {
-  board_nm <- "Portfolio Management"
-}
+board_nm <- "Portfolio Management"
 ```
 
 ## Load Modelling Data for `MasterCard`, i.e. `MA`
