@@ -31,9 +31,9 @@ for (i in 1:nrow(data_setup)) {
     dplyr::arrange(desc(dt)) %>% 
     dplyr::mutate(
       
-      # - 10 day ahead target
+      # - N day ahead target
       price_max_10w = TTR::runMax(x = dplyr::lag(close, n = 1), n = data_setup$return_window[i]),
-      target_10w = dplyr::if_else(price_max_10w/close > data_setup$return_target[i], 1, 0)
+      target = dplyr::if_else(price_max_10w/close > data_setup$return_target[i], 1, 0)
       
     ) %>% 
     dplyr::select(-price_max_10w) %>% 
