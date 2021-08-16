@@ -10,4 +10,6 @@
 
 - monitor performance
 
-- re-balance every month, i.e. in period from 1.1.2017 - 31.12.2019
+- re-balance every month, i.e. in period from 1.1.2018 - 31.12.2020
+
+- compare to simple benchmark model (get last month performance based on which the optimization is performed)
