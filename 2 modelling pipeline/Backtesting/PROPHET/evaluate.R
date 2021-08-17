@@ -8,6 +8,9 @@ library("tidyverse")
 load("./tmp/estimated prophet model - tmp.RData")
 source("./2 modelling pipeline/Backtesting/dates of rebalancing.R")
 
+# ----- Register Board -----
+pins::board_register_local(name = board_nm)
+
 # ----- Select best model using RMSE -----
 eval_prophet <-
   modelling_df %>% 
