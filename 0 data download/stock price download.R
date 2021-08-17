@@ -11,9 +11,8 @@ pins::board_register_local(name = board_nm)
 
 # ----- Read Tickers -----
 list_cp <- 
-  read_excel("0 data download/patria tickers/MarginCP.xlsx", 
-             skip = 2) %>% 
-  pins::pin(x = ., name = "MarginCP", board = board_nm)
+  pins::pin_get("MarginCP", board_nm) %>% 
+  as.data.frame()
 
 # ----- set dates -----
 first.date <- as.Date("2016-01-01")
@@ -21,7 +20,7 @@ last.date <- Sys.Date()
 freq.data <- "daily"
 
 # ----- Set Tickers -----
-tickers <- list_cp$Ticker
+tickers <- list_cp$`Adjusted Ticker`
 
 # ----- Download -----
 l.out <- BatchGetSymbols(tickers = tickers, 
