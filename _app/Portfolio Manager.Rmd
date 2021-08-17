@@ -1,0 +1,391 @@
+---
+title: "Portfolio Manager"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    source_code: embed
+runtime: shiny
+---
+
+```{r setup, include = F}
+library("data.table")
+library("dplyr")
+library("ggplot2")
+library("plotly")
+library("tidyverse")
+library("flexdashboard")
+library("shiny")
+library("DT")
+
+# - pins Board Configuration
+board_nm <- "Portfolio Management"
+pins::board_register_local(name = board_nm)
+
+# - Default List
+ticker_list <- 
+  pins::pin_get("md_stock_prices", board_nm) %>% 
+  dplyr::pull(ticker) %>% 
+  unique()
+
+# - Editable Table Functions
+modDtUi <- function(id){
+  ns = NS(id)
+  DT::dataTableOutput(ns('x1'))
+}
+
+modDt <-  function(input, output, session, data){
+  output$x1 <- 
+    DT::renderDataTable(data, 
+                        selection = "none",
+                        extensions = "Buttons",
+                        editable = list(target = "all",
+                                        disable = 
+                                          list(columns = 
+                                                 c(1, 2, 3, 5, 6, 7))), 
+                        server = TRUE, 
+                        options = list(dom = "Blfrtip",
+                                       buttons = c("copy", "csv", "excel"),
+                                       scrollX = T,
+                                       lengthMenu = list(c(5, 10, 20),
+                                                         c(5, 10, 20))),
+                        filter = "top", 
+                        class = "cell-border stripe") 
+  proxy <- dataTableProxy("x1", session = session)
+  
+  updatedData <- eventReactive(input$x1_cell_edit, {
+    info = input$x1_cell_edit
+    if (!is.null(info)) {
+      str(info)
+      data <<- DT::editData(data, info)
+    }
+    data
+  }, ignoreNULL = FALSE)
+  
+  return(updatedData)
+}
+```
+
+Patria Stocks
+=======================================================================
+
+Column {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+$~$
+
+```{r}
+actionButton(inputId = "patria_ticker_refresher", 
+             label = "Refresh Ticker Names", 
+             width = "160px")
+
+renderText({
+  upload_ticker_changes()
+})
+
+```
+
+Column {.tabset}
+-----------------------------------------------------------------------
+
+### Stock List
+
+```{r}
+modDtUi("edit_ticker")
+change_ticker <- 
+  callModule(modDt, "edit_ticker", 
+             data = pins::pin_get("MarginCP", board_nm) %>% 
+               dplyr::left_join(., pins::pin_get("md_stock_prices", board_nm) %>% 
+                                  dplyr::group_by(ticker) %>% 
+                                  dplyr::summarise(`# Observations` = as.numeric(n())) %>% 
+                                  as.data.frame(),
+                                by = c("Adjusted Ticker" = "ticker")) %>%
+               dplyr::mutate(`# Observations` = dplyr::if_else(is.na(`# Observations`), 0, `# Observations`)) %>% 
+               as.data.frame())
+
+# ----- Rewrite Table -----
+saved_changes <- reactive({
+  out_df <- change_ticker() %>% as.data.frame()
+  
+  return(out_df)
+})
+
+# ----- Save to Database -----
+upload_ticker_changes <- eventReactive(input$patria_ticker_refresher, {
+  
+  saved_df <- 
+    saved_changes() %>%
+    dplyr::select(-`# Observations`) %>% 
+    as.data.frame() %>% 
+    pins::pin(x = ., name = "MarginCP", board = board_nm)
+  
+  return("Succesfully Uploaded!")
+})
+```
+
+### Stocks by Country
+
+```{r}
+stocks_by_country <-
+  pins::pin_get("MarginCP", board_nm) %>% 
+  dplyr::group_by(`Země`) %>% 
+  dplyr::summarise(`Number of Stocks` = n()) %>% 
+  as.data.frame() %>% 
+  
+  ggplot(data = .) +
+  geom_bar(aes(x = `Země`, y = `Number of Stocks`), stat = "identity")
+
+ggplotly(stocks_by_country)
+```
+
+Patria Costs
+=======================================================================
+
+ETL
+=======================================================================
+
+Column {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+$~$
+
+**Refresh Data**
+
+```{r}
+actionButton(inputId = "run_download", label = "Run Data Download", width = "160px")
+
+# - Rendering of Objects
+shiny::renderPrint({
+  download_data_plt()
+})
+```
+
+$~$
+
+**Statistical Analysis**
+
+```{r}
+actionButton(inputId = "run_adf", label = "Run ADF Analysis", width = "160px")
+```
+
+```{r}
+actionButton(inputId = "run_hurst", label = "Run Hurst Analysis", width = "160px")
+```
+
+$~$
+
+**Check Downloaded Data**
+
+```{r}
+checkboxInput(inputId = "insufficient_history", label = "Check Missing Stocks", width = "160px")
+```
+
+```{r}
+checkboxInput(inputId = "latest_download", label = "Check Latest Data", width = "160px")
+```
+
+```{r}
+actionButton(inputId = "data_download", label = "Download Latest Data", width = "160px")
+```
+
+Column
+-----------------------------------------------------------------------
+
+```{r}
+# - Missing Stocks due to small amount of data
+history_data_plt <-
+  eventReactive(input$insufficient_history, {
+    
+    if (input$insufficient_history) {
+      
+      ticker_list <-
+        pins::pin_get("md_stock_prices", board_nm) %>% 
+        dplyr::select(ticker) %>% 
+        distinct() %>% 
+        as.data.frame()
+      
+      pins::pin_get("MarginCP", board_nm) %>% 
+        as.data.frame() %>% 
+        dplyr::filter(!(Ticker %in% c(ticker_list$ticker))) %>% 
+        as.data.frame() %>% 
+        
+        datatable(extensions = "Buttons",
+                  filter = "top",
+                  options = list(dom = "Blfrtip",
+                                 buttons = c("copy", "csv", "excel"),
+                                 scrollX = T,
+                                 lengthMenu = list(c(10, 25, 50, -1),
+                                                   c(10, 25, 50, "All"))))
+    }
+  })
+
+# - Rendering of Objects
+DT::renderDataTable({
+  history_data_plt()
+})
+```
+
+```{r}
+# - Missing Stocks due to small amount of data
+download_data_plt <-
+  eventReactive(input$run_download, {
+    
+    if (input$run_download) {
+      
+      rstudioapi::jobRunScript(path = "C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management/0 data download/stock price download.R", 
+                               name = "Data Download", 
+                               workingDir = "C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management")
+    }
+  })
+```
+
+```{r}
+# - Latest Date
+latest_data_plt <-
+  eventReactive(input$latest_download, {
+    
+    if (input$latest_download) {
+      line_plt <-
+        pins::pin_get("md_stock_prices", board_nm) %>% 
+        dplyr::select(ticker, dt) %>% 
+        distinct() %>% 
+        dplyr::group_by(dt) %>% 
+        dplyr::summarise(`# Observations` = n()) %>% 
+        dplyr::rename(`Date` = dt) %>% 
+        as.data.frame() %>% 
+        
+        ggplot(data = .) +
+        geom_line(aes(x = Date, y = `# Observations`))
+      
+      plotly::ggplotly(line_plt)
+    }
+  })
+
+plotly::renderPlotly({
+  latest_data_plt()
+})
+
+```
+
+ADF Test & Hurst Exponent
+=======================================================================
+
+Column {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+The **good stock** is currently considered one that 
+
+
+Column
+-----------------------------------------------------------------------
+
+### Predictability of Stocks
+```{r}
+stocks_selected <-
+  pins::pin_get("adf_test_result", board_nm) %>% 
+  dplyr::select(ticker, price_type, test_interpretation) %>% 
+  dplyr::rename(adf_interpretation = test_interpretation) %>% 
+  as.data.frame() %>% 
+  
+  left_join(., pins::pin_get("hurst_result", board_nm) %>% 
+              dplyr::select(ticker, price_type, test_interpretation) %>% 
+              dplyr::rename(hurst_interpretation = test_interpretation) %>% 
+              as.data.frame()) %>% 
+  
+  left_join(., pins::pin_get("MarginCP", board_nm) %>% 
+              dplyr::select(Ticker, `Název`, `Země`) %>% 
+              as.data.frame(), by = c("ticker" = "Ticker")) %>% 
+  as.data.frame() %>% 
+  
+  rowwise() %>% 
+  dplyr::mutate(
+    `ADF Good` = dplyr::if_else(!(adf_interpretation %in% c("Possible Random Walk", "Mean Reversion TS at 10%", "Mean Reversion TS at 5%")), 1, 0),
+    `Hurst Good` = dplyr::if_else(hurst_interpretation != "Possible Random Walk", 1, 0),
+  ) %>% 
+  dplyr::group_by(ticker) %>% 
+  dplyr::mutate(
+    n_rows = n(),
+    adf = sum(`ADF Good`),
+    hurst = sum(`Hurst Good`),
+  ) %>% 
+  rowwise() %>% 
+  dplyr::mutate(`is Good` = dplyr::if_else(n_rows == adf & n_rows == hurst, 1, 0)) %>% 
+  as.data.frame() %>% 
+  
+  dplyr::rename(
+    `ADF Result` = adf_interpretation,
+    `Hurst Result` = hurst_interpretation,
+    `Price Type` = price_type,
+    `Company` = `Název`, 
+    `Country` = `Země`
+  ) %>% 
+  dplyr::select(-n_rows, -adf, -hurst) %>% 
+  dplyr::relocate(., `Country`, .after = `ticker`) %>% 
+  dplyr::relocate(., `Company`, .after = `ticker`) %>% 
+  as.data.frame()
+
+stocks_selected %>% 
+  datatable(extensions = "Buttons",
+            filter = "top",
+            options = list(dom = "Blfrtip",
+                           buttons = c("copy", "csv", "excel"),
+                           scrollX = T,
+                           lengthMenu = list(c(10, 25, 50, -1),
+                                             c(10, 25, 50, "All"))))
+```
+
+### Eliminated Stocks
+
+```{r}
+pins::pin_get("MarginCP", board_nm) %>% 
+  as.data.frame() %>% 
+  dplyr::filter(Ticker %in% c(stocks_selected %>% 
+                                dplyr::filter(`is Good` < 1) %>% 
+                                dplyr::pull(ticker) %>% 
+                                unique())) %>% 
+  as.data.frame() %>% 
+  
+  datatable(extensions = "Buttons",
+            filter = "top",
+            options = list(dom = "Blfrtip",
+                           buttons = c("copy", "csv", "excel"),
+                           scrollX = T,
+                           lengthMenu = list(c(10, 25, 50, -1),
+                                             c(10, 25, 50, "All"))))
+
+```
+
+Stock Visualization
+=======================================================================
+
+Column {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+```{r}
+selectInput("select_stock", 
+            label = "Select Ticker", 
+            choices = ticker_list, 
+            multiple = T, 
+            width = "160px")
+```
+
+Backtesting Visualization
+=======================================================================
+
+Prediction Model
+=======================================================================
+
+Optimizer
+=======================================================================
+
+Transaction db
+=======================================================================
+
+Actual Portfolio Performance
+=======================================================================
+
+Help
+=======================================================================
+
+About
+=======================================================================
+
