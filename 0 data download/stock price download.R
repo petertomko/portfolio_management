@@ -20,6 +20,7 @@ last.date <- Sys.Date()
 freq.data <- "daily"
 
 # ----- Set Tickers -----
+# tickers <- "ERST.PR"
 tickers <- list_cp$`Adjusted Ticker`
 
 # ----- Download -----
