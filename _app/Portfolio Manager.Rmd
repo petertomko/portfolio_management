@@ -76,7 +76,7 @@ $~$
 ```{r}
 actionButton(inputId = "patria_ticker_refresher", 
              label = "Refresh Ticker Names", 
-             width = "160px")
+             width = "100%")
 
 renderText({
   upload_ticker_changes()
@@ -129,10 +129,24 @@ stocks_by_country <-
   pins::pin_get("MarginCP", board_nm) %>% 
   dplyr::group_by(`Země`) %>% 
   dplyr::summarise(`Number of Stocks` = n()) %>% 
+  dplyr::mutate(`is Downloaded` = "All List") %>% 
+  
+  rbind(., pins::pin_get("MarginCP", board_nm) %>% 
+          dplyr::filter(`Adjusted Ticker` %in% c(pins::pin_get("md_stock_prices", board_nm) %>% 
+                                                   dplyr::select(ticker) %>% 
+                                                   distinct() %>% 
+                                                   as.data.frame() %>% 
+                                                   dplyr::pull(ticker))) %>% 
+          dplyr::group_by(`Země`) %>% 
+          dplyr::summarise(`Number of Stocks` = n()) %>% 
+          dplyr::mutate(`is Downloaded` = "Downloaded") %>% 
+          as.data.frame()) %>% 
   as.data.frame() %>% 
   
   ggplot(data = .) +
-  geom_bar(aes(x = `Země`, y = `Number of Stocks`), stat = "identity")
+  geom_bar(aes(x = `Země`, y = `Number of Stocks`, fill = `is Downloaded`), 
+           stat = "identity", position = "dodge") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1))
 
 ggplotly(stocks_by_country)
 ```
@@ -143,7 +157,7 @@ Patria Costs
 ETL
 =======================================================================
 
-Column {.sidebar data-width=200}
+Column {.sidebar data-width=300}
 -----------------------------------------------------------------------
 
 $~$
@@ -151,7 +165,19 @@ $~$
 **Refresh Data**
 
 ```{r}
-actionButton(inputId = "run_download", label = "Run Data Download", width = "160px")
+actionButton(inputId = "run_download", label = "Run Data Download", width = "100%")
+
+# - Establish RStudio job
+download_data_plt <-
+  eventReactive(input$run_download, {
+    
+    if (input$run_download) {
+      
+      rstudioapi::jobRunScript(path = "C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management/0 data download/stock price download.R", 
+                               name = "Data Download", 
+                               workingDir = "C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management")
+    }
+  })
 
 # - Rendering of Objects
 shiny::renderPrint({
@@ -163,119 +189,107 @@ $~$
 
 **Statistical Analysis**
 
-```{r}
-actionButton(inputId = "run_adf", label = "Run ADF Analysis", width = "160px")
-```
+Using **Run ADF Analysis** and **Run Hurst Analysis** buttons, the analysis will be performed. Analysis are in the form of **.Rmd** documents stored in **./adhoc analysis**. The output will be loaded in **ADF Test & Hurst Exponent** bookmark.
 
 ```{r}
-actionButton(inputId = "run_hurst", label = "Run Hurst Analysis", width = "160px")
-```
+actionButton(inputId = "run_adf", label = "Run ADF Analysis", width = "100%")
 
-$~$
-
-**Check Downloaded Data**
-
-```{r}
-checkboxInput(inputId = "insufficient_history", label = "Check Missing Stocks", width = "160px")
-```
-
-```{r}
-checkboxInput(inputId = "latest_download", label = "Check Latest Data", width = "160px")
-```
-
-```{r}
-actionButton(inputId = "data_download", label = "Download Latest Data", width = "160px")
-```
-
-Column
------------------------------------------------------------------------
-
-```{r}
-# - Missing Stocks due to small amount of data
-history_data_plt <-
-  eventReactive(input$insufficient_history, {
+# - Establish RStudio job
+adf_analysis <-
+  eventReactive(input$run_adf, {
     
-    if (input$insufficient_history) {
+    if (input$run_adf) {
       
-      ticker_list <-
-        pins::pin_get("md_stock_prices", board_nm) %>% 
-        dplyr::select(ticker) %>% 
-        distinct() %>% 
-        as.data.frame()
-      
-      pins::pin_get("MarginCP", board_nm) %>% 
-        as.data.frame() %>% 
-        dplyr::filter(!(Ticker %in% c(ticker_list$ticker))) %>% 
-        as.data.frame() %>% 
-        
-        datatable(extensions = "Buttons",
-                  filter = "top",
-                  options = list(dom = "Blfrtip",
-                                 buttons = c("copy", "csv", "excel"),
-                                 scrollX = T,
-                                 lengthMenu = list(c(10, 25, 50, -1),
-                                                   c(10, 25, 50, "All"))))
+      rstudioapi::jobRunScript(path = "C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management/adhoc analysis/runFiles/ADF.R", 
+                               name = "ADF Test", 
+                               workingDir = "C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management")
     }
   })
 
 # - Rendering of Objects
-DT::renderDataTable({
-  history_data_plt()
+shiny::renderPrint({
+  adf_analysis()
 })
+
 ```
 
 ```{r}
-# - Missing Stocks due to small amount of data
-download_data_plt <-
-  eventReactive(input$run_download, {
+actionButton(inputId = "run_hurst", label = "Run Hurst Analysis", width = "100%")
+
+# - Establish RStudio job
+hurst_analysis <-
+  eventReactive(input$run_hurst, {
     
-    if (input$run_download) {
+    if (input$run_hurst) {
       
-      rstudioapi::jobRunScript(path = "C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management/0 data download/stock price download.R", 
-                               name = "Data Download", 
+      rstudioapi::jobRunScript(path = "C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management/adhoc analysis/runFiles/Hurst.R", 
+                               name = "Hurst Analysis", 
                                workingDir = "C:/Users/peter.tomko/OneDrive - Publicis Groupe/Desktop/ds_projects/portfolio_management")
     }
   })
+
+# - Rendering of Objects
+shiny::renderPrint({
+  hurst_analysis()
+})
 ```
 
+Column {.tabset}
+-----------------------------------------------------------------------
+
+### Check Missing Tickers
+
 ```{r}
-# - Latest Date
-latest_data_plt <-
-  eventReactive(input$latest_download, {
-    
-    if (input$latest_download) {
-      line_plt <-
-        pins::pin_get("md_stock_prices", board_nm) %>% 
-        dplyr::select(ticker, dt) %>% 
-        distinct() %>% 
-        dplyr::group_by(dt) %>% 
-        dplyr::summarise(`# Observations` = n()) %>% 
-        dplyr::rename(`Date` = dt) %>% 
-        as.data.frame() %>% 
-        
-        ggplot(data = .) +
-        geom_line(aes(x = Date, y = `# Observations`))
-      
-      plotly::ggplotly(line_plt)
-    }
-  })
+pins::pin_get("MarginCP", board_nm) %>% 
+  as.data.frame() %>% 
+  dplyr::filter(!(`Adjusted Ticker` %in% c(pins::pin_get("md_stock_prices", board_nm) %>% 
+                                             dplyr::select(ticker) %>% 
+                                             distinct() %>% 
+                                             as.data.frame() %>% 
+                                             dplyr::pull(ticker)))) %>% 
+  as.data.frame() %>% 
+  
+  datatable(extensions = "Buttons",
+            filter = "top",
+            options = list(dom = "Blfrtip",
+                           buttons = c("copy", "csv", "excel"),
+                           scrollX = T,
+                           lengthMenu = list(c(10, 25, 50, -1),
+                                             c(10, 25, 50, "All"))))
+```
 
-plotly::renderPlotly({
-  latest_data_plt()
-})
+### Check Latest Date of Download
+```{r Latest Date of Download}
+line_plt <-
+  pins::pin_get("md_stock_prices", board_nm) %>% 
+  dplyr::select(ticker, dt) %>% 
+  distinct() %>% 
+  dplyr::group_by(dt) %>% 
+  dplyr::summarise(`# Observations` = n()) %>% 
+  dplyr::rename(`Date` = dt) %>% 
+  as.data.frame() %>% 
+  
+  ggplot(data = .) +
+  geom_line(aes(x = Date, y = `# Observations`))
 
+plotly::ggplotly(line_plt)
 ```
 
 ADF Test & Hurst Exponent
 =======================================================================
 
-Column {.sidebar data-width=200}
+Column {.sidebar data-width=300}
 -----------------------------------------------------------------------
 
-The **good stock** is currently considered one that 
+The **good stock** is currently considered one that fulfill following conditions
 
+- time series is identified as **Mean Reversion Process** on **1%** p-value using **ADF Test**
 
-Column
+- time series is not identified as **Possible Random Walk** using **Hurst Exponent**
+
+For more information have a look at **./adhoc analysis/ADF-test.html** and **./adhoc analysis/Stationary-Test-using-Hurst-Exponent.html**.
+
+Column {.tabset}
 -----------------------------------------------------------------------
 
 ### Predictability of Stocks
@@ -292,8 +306,8 @@ stocks_selected <-
               as.data.frame()) %>% 
   
   left_join(., pins::pin_get("MarginCP", board_nm) %>% 
-              dplyr::select(Ticker, `Název`, `Země`) %>% 
-              as.data.frame(), by = c("ticker" = "Ticker")) %>% 
+              dplyr::select(`Adjusted Ticker`, `Název`, `Země`) %>% 
+              as.data.frame(), by = c("ticker" = "Adjusted Ticker")) %>% 
   as.data.frame() %>% 
   
   rowwise() %>% 
@@ -338,10 +352,10 @@ stocks_selected %>%
 ```{r}
 pins::pin_get("MarginCP", board_nm) %>% 
   as.data.frame() %>% 
-  dplyr::filter(Ticker %in% c(stocks_selected %>% 
-                                dplyr::filter(`is Good` < 1) %>% 
-                                dplyr::pull(ticker) %>% 
-                                unique())) %>% 
+  dplyr::filter(`Adjusted Ticker` %in% c(stocks_selected %>% 
+                                           dplyr::filter(`is Good` < 1) %>% 
+                                           dplyr::pull(ticker) %>% 
+                                           unique())) %>% 
   as.data.frame() %>% 
   
   datatable(extensions = "Buttons",
@@ -354,6 +368,49 @@ pins::pin_get("MarginCP", board_nm) %>%
 
 ```
 
+### Selected Stocks
+
+```{r}
+pins::pin_get("MarginCP", board_nm) %>% 
+  as.data.frame() %>% 
+  dplyr::filter(`Adjusted Ticker` %in% c(stocks_selected %>% 
+                                           dplyr::filter(`is Good` > 0) %>% 
+                                           dplyr::pull(ticker) %>% 
+                                           unique())) %>% 
+  as.data.frame() %>% 
+  
+  datatable(extensions = "Buttons",
+            filter = "top",
+            options = list(dom = "Blfrtip",
+                           buttons = c("copy", "csv", "excel"),
+                           scrollX = T,
+                           lengthMenu = list(c(10, 25, 50, -1),
+                                             c(10, 25, 50, "All"))))
+
+```
+
+### Summary of Selected Stocks
+```{r}
+selected_stocks_summary_plt <-
+  
+  stocks_selected %>% 
+  dplyr::select(ticker, Country, `is Good`) %>% 
+  dplyr::distinct() %>% 
+  dplyr::mutate(`is Good` = dplyr::if_else(`is Good` == 0, "Not suitable", "Suitable")) %>% 
+  dplyr::group_by(Country, `is Good`) %>% 
+  dplyr::summarise(
+    `Number of Stocks` = n()
+  ) %>% 
+  as.data.frame() %>% 
+  
+  ggplot(data = .) +
+  geom_bar(aes(x = Country, y = `Number of Stocks`, fill = `is Good`), 
+           stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1))
+
+ggplotly(selected_stocks_summary_plt)
+```
+
 Stock Visualization
 =======================================================================
 
@@ -363,9 +420,12 @@ Column {.sidebar data-width=200}
 ```{r}
 selectInput("select_stock", 
             label = "Select Ticker", 
-            choices = ticker_list, 
+            choices = ticker_list[ticker_list %in% c(stocks_selected %>% 
+                                                       dplyr::filter(`is Good` > 0) %>% 
+                                                       dplyr::pull(ticker) %>% 
+                                                       unique())], 
             multiple = T, 
-            width = "160px")
+            width = "100%")
 ```
 
 Backtesting Visualization
@@ -385,6 +445,35 @@ Actual Portfolio Performance
 
 Help
 =======================================================================
+
+Inputs {.sidebar data-width=250}
+-----------------------------------------------------------------------
+
+$~$
+
+Using **Download Backup Files** button, you can download all necessary files using which the main functionality of **Portfolio Manager App** might be transferred to other device.
+
+```{r}
+uiOutput("downloadUI")
+
+output$downloadUI <- renderUI({
+  downloadButton("downBtn", "Download Backup Files", style = "width:100%;")
+})
+
+output$downBtn <- downloadHandler(
+  filename = function() {
+    "portfolio_manager_backup.RData"
+  },
+  
+  content = function(file) {
+    
+    MarginCP <- pins::pin_get("MarginCP", board_nm) %>% as.data.frame()
+    md_stock_prices <- pins::pin_get("md_stock_prices", board_nm) %>% as.data.frame()
+    
+    save(MarginCP, md_stock_prices, file = file)
+  }
+)
+```
 
 About
 =======================================================================
