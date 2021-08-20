@@ -27,6 +27,11 @@ ticker_list <-
   dplyr::pull(ticker) %>% 
   unique()
 
+# - Download Data
+md_stock_prices <- 
+  pins::pin_get("md_stock_prices", board_nm) %>% 
+  as.data.frame()
+
 # - Editable Table Functions
 modDtUi <- function(id){
   ns = NS(id)
@@ -129,7 +134,7 @@ stocks_by_country <-
   pins::pin_get("MarginCP", board_nm) %>% 
   dplyr::group_by(`Země`) %>% 
   dplyr::summarise(`Number of Stocks` = n()) %>% 
-  dplyr::mutate(`is Downloaded` = "All List") %>% 
+  dplyr::mutate(`is Downloaded` = "All Stocks") %>% 
   
   rbind(., pins::pin_get("MarginCP", board_nm) %>% 
           dplyr::filter(`Adjusted Ticker` %in% c(pins::pin_get("md_stock_prices", board_nm) %>% 
@@ -146,7 +151,8 @@ stocks_by_country <-
   ggplot(data = .) +
   geom_bar(aes(x = `Země`, y = `Number of Stocks`, fill = `is Downloaded`), 
            stat = "identity", position = "dodge") +
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1), 
+        legend.title = element_blank())
 
 ggplotly(stocks_by_country)
 ```
@@ -406,7 +412,8 @@ selected_stocks_summary_plt <-
   ggplot(data = .) +
   geom_bar(aes(x = Country, y = `Number of Stocks`, fill = `is Good`), 
            stat = "identity") +
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1), 
+        legend.title = element_blank())
 
 ggplotly(selected_stocks_summary_plt)
 ```
@@ -424,24 +431,106 @@ selectInput("select_stock",
                                                        dplyr::filter(`is Good` > 0) %>% 
                                                        dplyr::pull(ticker) %>% 
                                                        unique())], 
-            multiple = T, 
+            multiple = F, 
             width = "100%")
 ```
 
-Backtesting Visualization
+Column
+-----------------------------------------------------------------------
+
+### OHLC Plot
+```{r}
+# - Establish Visualization
+stock_viz <-
+  eventReactive(input$select_stock, {
+    
+    stock_viz_plt <- 
+      md_stock_prices %>% 
+      dplyr::filter(ticker %in% c(input$select_stock)) %>% 
+      as.data.frame() %>% 
+      
+      ggplot(data = .) +
+      geom_line(aes(x = dt, y = open, col = "Open")) +
+      geom_line(aes(x = dt, y = high, col = "High")) +
+      geom_line(aes(x = dt, y = low, col = "Low")) +
+      geom_line(aes(x = dt, y = close, col = "Close")) +
+      
+      xlab("Date") +
+      ylab("Price") +
+      theme(legend.title = element_blank())
+    
+    plotly::ggplotly(stock_viz_plt)
+  })
+
+# - Rendering Plot
+plotly::renderPlotly({
+  stock_viz()
+})
+```
+
+### Distribution of Daily Returns
+```{r}
+# - Establish Visualization
+stock_dist <-
+  eventReactive(input$select_stock, {
+    
+    stock_dist_plt <- 
+      md_stock_prices %>% 
+      dplyr::filter(ticker %in% c(input$select_stock)) %>% 
+      dplyr::arrange(dt) %>% 
+      dplyr::mutate(`Daily Return` = (p_adjusted/dplyr::lag(p_adjusted, n = 1)) - 1) %>% 
+      as.data.frame() %>% 
+      
+      ggplot(data = .) +
+      geom_histogram(aes(`Daily Return`)) +
+      ylab("")
+    
+    plotly::ggplotly(stock_dist_plt)
+  })
+
+# - Rendering Plot
+plotly::renderPlotly({
+  stock_dist()
+})
+```
+
+Predictive Modelling
 =======================================================================
 
-Prediction Model
-=======================================================================
+Column {.sidebar data-width=300}
+-----------------------------------------------------------------------
 
-Optimizer
-=======================================================================
+Here is the workflow visualized in the form of connected graph.
+
+Column {.tabset}
+-----------------------------------------------------------------------
+
+### Features Engineering
+
+### Backtesting Workflow
+
+### Production Workflow
+
+### Optimizer
+
+### Margin Controller Visualization
+
 
 Transaction db
 =======================================================================
 
 Actual Portfolio Performance
 =======================================================================
+
+Column {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+Column {.tabset}
+-----------------------------------------------------------------------
+
+### Portfolio vs. Benchmark Performance
+
+### 
 
 Help
 =======================================================================
